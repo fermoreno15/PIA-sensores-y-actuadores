@@ -1,0 +1,88 @@
+#include <SimpleTimer.h>
+
+const int trigPin = 9;  
+const int echoPin = 10; 
+const int bomba1Pin = 3; 
+const int bomba2Pin = 4; 
+const int sensorFlujoPin = 2; 
+const int botonPin = 5;  
+
+volatile int pulsos;         
+float factorCalibracion = 4.5; 
+float volumen = 0;           
+const int maxAltura = 30;    
+const int nivelMin = 7;      
+const int volumenMax = 750;  
+
+SimpleTimer timer;
+bool bomba2Activa = false;
+
+long medirDistancia() {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  long duracion = pulseIn(echoPin, HIGH);
+  long distancia = duracion * 0.034 / 2; 
+  return distancia;
+}
+
+void contarPulsos() {
+  pulsos++;
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(bomba1Pin, OUTPUT);
+  pinMode(bomba2Pin, OUTPUT);
+  pinMode(sensorFlujoPin, INPUT);
+  pinMode(botonPin, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(sensorFlujoPin), contarPulsos, RISING);
+
+  digitalWrite(bomba1Pin, LOW);
+  digitalWrite(bomba2Pin, LOW);
+
+  timer.setInterval(1000, calcularFlujo);
+}
+
+void calcularFlujo() {
+  float flujoLPM = (pulsos / factorCalibracion); 
+  volumen += (flujoLPM / 60.0) * 1000.0;         
+  pulsos = 0; 
+  Serial.print("Volumen: ");
+  Serial.print(volumen);
+  Serial.println(" ml");
+
+  if (volumen >= volumenMax) {
+    digitalWrite(bomba1Pin, LOW);
+    digitalWrite(bomba2Pin, HIGH); 
+    bomba2Activa = true;
+  }
+}
+
+void loop() {
+  timer.run();
+  long distancia = medirDistancia();
+  Serial.print("Distancia: ");
+  Serial.print(distancia);
+  Serial.println(" cm");
+
+  if (distancia <= (maxAltura - nivelMin) && volumen < volumenMax) {
+    digitalWrite(bomba1Pin, HIGH);
+  } else {
+    digitalWrite(bomba1Pin, LOW);
+  }
+
+  if (bomba2Activa && digitalRead(botonPin) == LOW) {
+    digitalWrite(bomba2Pin, LOW); 
+    bomba2Activa = false;
+    volumen = 0;
+  }
+
+  delay(500);
+}
