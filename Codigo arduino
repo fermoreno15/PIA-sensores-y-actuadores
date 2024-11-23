@@ -1,88 +1,79 @@
-#include <SimpleTimer.h>
+const int trigPin = 9;      
+const int echoPin = 10;     
+const int rele1 = 3;       
+const int rele2 = 4;       
+const int flowSensorPin = 2; 
+const long maxDistance = 10; 
+volatile double waterFlow = 0; 
 
-const int trigPin = 9;  
-const int echoPin = 10; 
-const int bomba1Pin = 3; 
-const int bomba2Pin = 4; 
-const int sensorFlujoPin = 2; 
-const int botonPin = 5;  
+void setup() {
+  
+  pinMode(rele1, OUTPUT);
+  pinMode(rele2, OUTPUT);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(flowSensorPin, INPUT); 
+  Serial.begin(9600);
 
-volatile int pulsos;         
-float factorCalibracion = 4.5; 
-float volumen = 0;           
-const int maxAltura = 30;    
-const int nivelMin = 7;      
-const int volumenMax = 750;  
+  waterFlow = 0;
+  attachInterrupt(digitalPinToInterrupt(flowSensorPin), pulse, RISING); 
 
-SimpleTimer timer;
-bool bomba2Activa = false;
+  digitalWrite(rele1, HIGH);
+  digitalWrite(rele2, HIGH);
+}
 
-long medirDistancia() {
+void loop() {
+  
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
   digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
-  long duracion = pulseIn(echoPin, HIGH);
-  long distancia = duracion * 0.034 / 2; 
-  return distancia;
-}
 
-void contarPulsos() {
-  pulsos++;
-}
+  long duration = pulseIn(echoPin, HIGH);
+  long distance = duration * 0.034 / 2;
 
-void setup() {
-  Serial.begin(9600);
-
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-  pinMode(bomba1Pin, OUTPUT);
-  pinMode(bomba2Pin, OUTPUT);
-  pinMode(sensorFlujoPin, INPUT);
-  pinMode(botonPin, INPUT_PULLUP);
-
-  attachInterrupt(digitalPinToInterrupt(sensorFlujoPin), contarPulsos, RISING);
-
-  digitalWrite(bomba1Pin, LOW);
-  digitalWrite(bomba2Pin, LOW);
-
-  timer.setInterval(1000, calcularFlujo);
-}
-
-void calcularFlujo() {
-  float flujoLPM = (pulsos / factorCalibracion); 
-  volumen += (flujoLPM / 60.0) * 1000.0;         
-  pulsos = 0; 
-  Serial.print("Volumen: ");
-  Serial.print(volumen);
-  Serial.println(" ml");
-
-  if (volumen >= volumenMax) {
-    digitalWrite(bomba1Pin, LOW);
-    digitalWrite(bomba2Pin, HIGH); 
-    bomba2Activa = true;
-  }
-}
-
-void loop() {
-  timer.run();
-  long distancia = medirDistancia();
   Serial.print("Distancia: ");
-  Serial.print(distancia);
+  Serial.print(distance);
   Serial.println(" cm");
 
-  if (distancia <= (maxAltura - nivelMin) && volumen < volumenMax) {
-    digitalWrite(bomba1Pin, HIGH);
+  long midPoint = maxDistance / 2;
+
+  if (distance <= midPoint) {
+    digitalWrite(rele1, LOW); // Activar primer relevador (LOW = encendido)
+    Serial.println("Primer relevador activado.");
+
+    delay(1000); 
+    Serial.println("Iniciando medición del sensor de flujo.");
+  
+    while (true) {
+      double adjustedFlow = waterFlow / 13.0;
+
+      Serial.print("Flujo acumulado: ");
+      Serial.print(adjustedFlow);
+      Serial.println(" L");
+ 
+      if (adjustedFlow >= 0.4) {
+        digitalWrite(rele1, HIGH);  
+        Serial.println("Primer relevador desactivado.");
+        digitalWrite(rele2, LOW); 
+        Serial.println("Segundo relevador activado.");
+
+        delay(7000); 
+        digitalWrite(rele2, HIGH); 
+        Serial.println("Segundo relevador desactivado.");
+
+        waterFlow = 0; 
+        Serial.println("Flujo reiniciado.");
+        break; 
+      }
+      delay(500); 
+    }
   } else {
-    digitalWrite(bomba1Pin, LOW);
+    digitalWrite(rele1, HIGH); 
   }
-
-  if (bomba2Activa && digitalRead(botonPin) == LOW) {
-    digitalWrite(bomba2Pin, LOW); 
-    bomba2Activa = false;
-    volumen = 0;
-  }
-
-  delay(500);
+  delay(100); 
+}
+void pulse() {
+  waterFlow += 1.0 / 450.0; 
 }
